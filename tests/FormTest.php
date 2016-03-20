@@ -21,6 +21,7 @@ class FormTest extends PHPUnit_Framework_TestCase
             'enctype' => 'multipart/form-data',
             'id' => 'form',
             'fields' => [],
+            'validation' => [],
         ]);
 
         $form->set([
@@ -36,6 +37,90 @@ class FormTest extends PHPUnit_Framework_TestCase
             'enctype' => 'text/plain',
             'id' => 'contact-form',
             'fields' => [],
+            'validation' => [],
+        ]);
+    }
+
+    public function testValidate()
+    {
+        $form = new Form();
+
+        $form->addField([
+            'name' => 'name',
+            'type' => 'text',
+        ]);
+
+        $form->addValidation('name', [
+            'not_empty',
+        ]);
+
+        $request = new MockServerRequest();
+        $request->post = ['name' => ''];
+        $form->handleRequest($request);
+
+        $this->assertFalse($form->isValid());
+
+        $request->post = ['name' => 'hello world'];
+        $form->handleRequest($request);
+
+        $this->assertTrue($form->isValid());
+
+        $form = new Form();
+        $form->addField([
+            'name' => 'name',
+            'type' => 'text',
+            'validate' => ['not_empty']
+        ])
+        ->addField([
+            'name' => 'email',
+            'type' => 'email',
+            'validate' => ['not_empty', 'email'],
+        ])
+        ->addField([
+            'name' => 'password',
+            'type' => 'password',
+            'validate' => ['not_empty'],
+        ]);
+
+        $request->post = ['name' => '', 'email' => 'jimbobo.local', 'password' => 'eruiere'];
+        $form->handleRequest($request);
+
+        $this->assertFalse($form->isValid());
+        $this->assertEquals($form->getErrors(), [
+            'name' => [
+                'is_empty',
+            ],
+            'email' => [
+                'email_is_not_valid',
+            ],
+        ]);
+
+        $form = new Form();
+        $form->addField([
+            'name' => 'name',
+            'type' => 'text',
+            'validate' => ['not_empty']
+        ])
+        ->addField([
+            'name' => 'email',
+            'type' => 'email',
+            'validate' => ['not_empty', 'email'],
+        ])
+        ->addField([
+            'name' => 'password',
+            'type' => 'password',
+            'validate' => ['not_empty'],
+        ]);
+
+        $request->post = ['name' => 'hi', 'email' => 'jimbob@local.loc', 'password' => 'eruiere'];
+        $form->handleRequest($request);
+
+        $this->assertTrue($form->isValid());
+        $this->assertEquals($form->getErrors(), []);
+        $this->assertEquals($form->getData(), [
+            'name' => 'hi',
+            'email' => 'jimbob@local.loc',
+            'password' => 'eruiere',
         ]);
     }
 
@@ -67,6 +152,20 @@ class FormTest extends PHPUnit_Framework_TestCase
         $this->assertInstanceOf('\Formster\Fields\TextareaField', $field);
     }
 
+    public function testFormAddButtonField()
+    {
+        $form = new Form();
+
+        $form->addField([
+            'name' => 'name',
+            'type' => 'button',
+        ]);
+
+        $field = $form->getField('name');
+
+        $this->assertInstanceOf('\Formster\Fields\ButtonField', $field);
+    }
+
     public function testFormAddCheckboxField()
     {
         $form = new Form();
@@ -93,6 +192,20 @@ class FormTest extends PHPUnit_Framework_TestCase
         $field = $form->getField('name');
 
         $this->assertInstanceOf('\Formster\Fields\EmailField', $field);
+    }
+
+    public function testFormAddPasswordField()
+    {
+        $form = new Form();
+
+        $form->addField([
+            'name' => 'name',
+            'type' => 'password',
+        ]);
+
+        $field = $form->getField('name');
+
+        $this->assertInstanceOf('\Formster\Fields\PasswordField', $field);
     }
 
     public function testFormAddRadioField()
@@ -136,6 +249,21 @@ class FormTest extends PHPUnit_Framework_TestCase
 
         $this->assertInstanceOf('\Formster\Fields\SelectField', $field);
     }
+
+    public function testFormAddSubmitField()
+    {
+        $form = new Form();
+
+        $form->addField([
+            'name' => 'name',
+            'type' => 'submit',
+        ]);
+
+        $field = $form->getField('name');
+
+        $this->assertInstanceOf('\Formster\Fields\SubmitField', $field);
+    }
+
 
     public function testFormAddTelField()
     {

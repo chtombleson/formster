@@ -1,17 +1,56 @@
 <?php
 namespace Formster;
 
-use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
 class Form
 {
+    /**
+     * @var string Form action
+     */
     protected $action;
+
+    /**
+     * @var string Form method
+     */
     protected $method;
+
+    /**
+     * @var string Form enctype
+     */
     protected $enctype;
+
+    /**
+     * @var string Form id
+     */
     protected $id;
 
+    /**
+     * @var Formster\Fields
+     */
     protected $fields;
 
+    /**
+     * @var Formster\Validation
+     */
+    protected $validation;
+
+    /**
+     * @var Psr\Http\Message\ServerRequestInterface
+     */
+    protected $request;
+
+    /**
+     * @var array Form errors
+     */
+    protected $errors = [];
+
+    /**
+     * @param $method   string Form method
+     * @param $action   string Form action
+     * @param $enctype  string Form enctype
+     * @param $id       string Form id
+     */
     public function __construct($method='post', $action=null, $enctype=null, $id=null)
     {
         $this->setMethod($method);
@@ -29,8 +68,12 @@ class Form
         }
 
         $this->fields = new Fields();
+        $this->validation = new Validation();
     }
 
+    /**
+     * @return array Form properties
+     */
     public function get()
     {
         $fields = $this->fields->get();
@@ -48,9 +91,14 @@ class Form
             'enctype' => $this->enctype,
             'id' => $this->id,
             'fields' => $fields,
+            'validation' => $this->validation->get(),
         ];
     }
 
+    /**
+     * @param $properties array Form properties
+     * @return self
+     */
     public function set($properties)
     {
         if (isset($properties['action'])) {
@@ -72,11 +120,18 @@ class Form
         return $this;
     }
 
+    /**
+     * @return string Form action
+     */
     public function getAction()
     {
         return $this->action;
     }
 
+    /**
+     * @param $action string Form action
+     * @return self
+     */
     public function setAction($action)
     {
         $this->action = $action;
@@ -84,11 +139,19 @@ class Form
         return $this;
     }
 
+    /**
+     * @return string Form method
+     */
     public function getMethod()
     {
         return $this->method;
     }
 
+    /**
+     * @param $method string Form method
+     * @return self
+     * @throws Formster\Exception On invalid form method
+     */
     public function setMethod($method)
     {
         $method = strtolower($method);
@@ -102,11 +165,19 @@ class Form
         return $this;
     }
 
+    /**
+     * @return string Form enctype
+     */
     public function getEnctype()
     {
         return $this->enctype;
     }
 
+    /**
+     * @param $enctype string Form enctype
+     * @return self
+     * @throws Formster\Exception On invalid enctype
+     */
     public function setEnctype($enctype)
     {
         $enctypes = [
@@ -124,11 +195,18 @@ class Form
         return $this;
     }
 
+    /**
+     * @return string Form id
+     */
     public function getId()
     {
         return $this->id;
     }
 
+    /**
+     * @param $id string Form id
+     * @return self
+     */
     public function setId($id)
     {
         $this->id = $id;
@@ -152,8 +230,9 @@ class Form
      *          - min: int Min amount of values
      *          - max: int Max amount of values
      *          - maxlength: int Max length of value
+     *  - validate: array Validation filters (not_empty, boolean, email, float, int, ip, mac, url)
      *
-     * @return $this
+     * @return self
      */
     public function addField($properties)
     {
@@ -171,9 +250,17 @@ class Form
             $options
         );
 
+        if (isset($properties['validate'])) {
+            $this->addValidation($properties['name'], $properties['validate']);
+        }
+
         return $this;
     }
 
+    /**
+     * @param $name string Field name
+     * @return self
+     */
     public function removeField($name)
     {
         $this->fields->remove($name);
@@ -181,11 +268,91 @@ class Form
         return $this;
     }
 
+    /**
+     * @param $name string Field name
+     * @return Formster\Fields\AbstractField Field object
+     */
     public function getField($name)
     {
         return $this->fields->get($name);
     }
 
+    /**
+     * @param $field  string Field name
+     * @param $filter string Filter (not_empty, boolean, email, float, int, ip, mac, url)
+     * @return self
+     */
+    public function addValidation($field, $filters)
+    {
+        foreach ($filters as $filter) {
+            $this->validation->add($field, $filter);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param $request Psr\Http\Message\ServerRequestInterface User request
+     * @return self
+     */
+    public function handleRequest(ServerRequestInterface $request)
+    {
+        $this->request = $request;
+
+        return $this;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function isValid()
+    {
+        if (!$this->request) {
+            return false;
+        }
+
+        $this->errors = $this->validation->validate($this->request);
+
+        if (count($this->errors) > 0) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array Form errors
+     */
+    public function getErrors()
+    {
+        return $this->errors;
+    }
+
+    /**
+     * @return array|null Form data
+     */
+    public function getData()
+    {
+        if (!$this->request) {
+            return null;
+        }
+
+        switch ($this->getMethod()) {
+            case 'get':
+                return $this->request->getQueryParams();
+                break;
+
+            case 'post':
+                return $this->request->getParsedBody();
+                break;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return string
+     */
     public function renderForm()
     {
         $html  = $this->renderFormOpen();
@@ -199,6 +366,9 @@ class Form
         return $html;
     }
 
+    /**
+     * @return string
+     */
     public function renderFormOpen()
     {
         $html  = '<form method="' . strtolower($this->getMethod()) . '" ';
@@ -220,11 +390,18 @@ class Form
         return $html;
     }
 
+    /**
+     * @return string
+     */
     public function renderFormClose()
     {
         return '</form>';
     }
 
+    /**
+     * @param $name string Field name
+     * @return string
+     */
     public function renderField($name)
     {
         return $this->fields->get($name)->render();
